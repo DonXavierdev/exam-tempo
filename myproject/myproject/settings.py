@@ -66,13 +66,28 @@ WSGI_APPLICATION = 'myproject.wsgi.application'
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 DATABASES = {
+    'online': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'exam_cell_data',
+        'USER': 'root',
+        'PASSWORD': '>8G}qMYVg+EJHI$Q',
+        'HOST': '34.100.212.63',
+        'PORT':'3306',
+        'OPTIONS': {
+            'ssl': {
+                'ca': 'server-ca.pem',
+                'cert': 'client-cert.pem',
+                'key': 'client-key.pem',
+            }
+        }
+    },
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'sample',
+        'NAME': 'exam_cell_data',
         'USER': 'root',
         'PASSWORD': 'donxavier20123',
-        'HOST': 'localhost',  # or the hostname where your MySQL server is running
-        'PORT': '3306',      # or the port on which your MySQL server is listening
+        'HOST': 'localhost',
+        'PORT':'3306',
     }
 }
 

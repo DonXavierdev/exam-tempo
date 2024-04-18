@@ -1,13 +1,7 @@
 from django.shortcuts import render
-from .models import Student
-from .models import Notification
-from .models import test
+from django.db import connection
 from django.core.serializers import serialize
-from .models import Teacher
-from .models import Users
-from .models import StudentAllocation
-from .models import RoomData
-from .models import TeacherAllocation
+from datetime import datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -16,126 +10,104 @@ from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login
 import json
-# def userreg(request):
-#     return render(request,"userreg.html",{})
-# def insertuser(request):
-#     uname = request.POST['name']
-#     uemail = request.POST['email']
-#     unumber = request.POST['number']
-#     us = User(name = uname , email = uemail , number = unumber)
-#     us.save()
-#     return render(request,'index.html',{'user':us})
 
-def stud_data(request):
-    students = Student.objects.all()
-    stud_name = students[1].name
-    stud_prn = students[1].prn
-    stud_department = students[1].department
-    notify = Notification.objects.all()
-    stud_notify = notify[0].message
-    return JsonResponse({'name': stud_name , 'prn' : stud_prn , 'department': stud_department, 'notification':stud_notify })
+def get_all_data(query, db_alias='default'):
+    with connection.cursor() as cursor:
+        cursor.execute(query)
+        rows = cursor.fetchall()
+    return rows
 
-def teach_data(request):
-    teachers = Teacher.objects.all()
-    teach_name = teachers[0].name
-    teach_prn = teachers[0].prn
-    teach_department = teachers[0].department
-    notify = Notification.objects.all()
-    teach_notify = notify[1].message
-    return JsonResponse({'name': teach_name , 'prn' : teach_prn, 'department': teach_department, 'notification':teach_notify })
-@csrf_exempt 
-def save_data(request):
-    
-    if request.method == 'POST':
-        data = request.POST.get('data')
-        tst = test(msg = data)
-        tst.save()
-        return JsonResponse({'message': 'Data saved successfully.'})
-    else:
-        return JsonResponse({'message': 'Invalid request method.'}, status=400)
+
 @csrf_exempt 
 def login_view(request):
     if request.method == 'POST':
-        prn = request.POST.get('username')
-        password = request.POST.get('password')        
-        user = Users.objects.get(prn=prn)
-        if user.password == password:
-            user_type = user.type  
-            if user_type == 'teacher':
-                teacher = Teacher.objects.get(prn=user.prn)
-                teach_name = teacher.name
-                teach_dep = teacher.department
-                teacher_notifies = Notification.objects.filter(prn=user.prn)
-                teach_notify_msgs = [notify.message for notify in teacher_notifies]
-                teacher_allocations = TeacherAllocation.objects.filter(prn=user.prn)
-                student_data = StudentAllocation.objects.all()
+        user_id = request.POST.get('username')
+        password = request.POST.get('password')    
+        query = f"SELECT * FROM users WHERE user_id = '{user_id}'"    
+        rows = get_all_data(query)
+        if rows[0][1] == password:
+            user_type = rows[0][2]  
+            if user_type == 'Teacher':
+                query = f"SELECT * FROM teachers WHERE teacher_id = '{user_id}'"
+                teacher = get_all_data(query)
+                teach_name = teacher[0][1]
+                teach_dep = teacher[0][2]
+                query = f"SELECT content FROM teacher_notifications WHERE teacher_id = '{user_id}'"
+                teacher_notifies = get_all_data(query)            
+                query = f"SELECT * FROM teacher_allocations WHERE teacher_id = '{user_id}'"
+                teacher_allocations = get_all_data(query)
+                
+                # student_data = StudentAllocation.objects.all()
                 teacher_allocations_data = []
-
+                
+                
                 for allocation in teacher_allocations:
-                    room_name = allocation.room_name
-                    date = allocation.date.strftime('%Y-%m-%d')
+                    query = f"SELECT * FROM rooms WHERE room_id = '{allocation[4]}'"
+                    room_data = get_all_data(query)                    
                     
                     # Filter student data based on room name and date
-                    filtered_student_data = student_data.filter(room_name=room_name, date=date)
+                    # filtered_student_data = student_data.filter(room_name=room_name, date=date)
                     
                     # Extract student PRN for each matching record
-                    student_prns = [student.prn for student in filtered_student_data]
+                    # student_prns = [student.prn for student in filtered_student_data]
     
                     allocation_data = {
-                        'room_name': room_name,
-                        'date': date,
-                        'student_prns': student_prns
+                        'room_name': room_data[0][1],
+                        'date': datetime.strptime(allocation[2], "%d/%m/%Y").strftime("%Y-%m-%d"),
+                        'student_prns': ['210021027643','210021027641','210021027642','210021027640','210021027639','210021027637','210021027635','210021027636','210021027638']
                     }
                     teacher_allocations_data.append(allocation_data)
-                print(teacher_allocations_data)
+                teacher_notify_msgs = [notify[0] for notify in teacher_notifies]
                 data = {
                     'name': teach_name,
-                    'prn': user.prn,
+                    'prn': user_id,
                     'department': teach_dep,
                     'user_type': user_type,
-                    'notification': teach_notify_msgs,
+                    'notification': teacher_notify_msgs,
                     'teacher_allocations': teacher_allocations_data
                 }
-                
+                print(data)
                 return JsonResponse(data)
 
-            elif user_type == 'student':
-                student = Student.objects.get(prn=user.prn)
-                stud_name = student.name
-                stud_dep = student.department
-                student_notifies = Notification.objects.filter(prn=user.prn)
-                student_allocations = StudentAllocation.objects.filter(prn=user.prn)
-
-                # Prepare student allocation data
+            elif user_type == 'Student':
+    
+                query = f"SELECT * FROM students WHERE prn = '{user_id}'"
+                student = get_all_data(query)
+                stud_name = student[0][1]
+                stud_dep = student[0][3]
+                query = f"SELECT content FROM student_notifications WHERE prn = '{user_id}'"
+                student_notifies = get_all_data(query)
+                query = f"SELECT * FROM student_allocations WHERE prn = '{user_id}'"
+                student_allocations = get_all_data(query)
                 student_allocations_data = []
 
                 for allocation in student_allocations:
-                    room_data = RoomData.objects.get(room_name=allocation.room_name)
+                    query = f"SELECT * FROM rooms WHERE room_id = '{allocation[6]}'"
+                    room_data = get_all_data(query)
+                    query = f"SELECT * FROM room_classes WHERE room_class_id = '{room_data[0][2]}'"
+                    class_data = get_all_data(query)
+                    
                     allocation_data = {
-                        'course_code': allocation.course_code,
-                        'room_name': allocation.room_name,
-                        'date': allocation.date.strftime('%Y-%m-%d'),
-                        'student_row': allocation.student_row,
-                        'student_col': allocation.student_col,
-                        'room_columns': room_data.columns,
-                        'room_seats': room_data.seats,
-                        'room_rows': room_data.rows,
+                        'course_code': allocation[3],
+                        'room_name': room_data[0][1],
+                        'date': datetime.strptime(allocation[2], "%d/%m/%Y").strftime("%Y-%m-%d"),
+                        'student_row': allocation[7],
+                        'student_col': allocation[8],
+                        'room_columns': class_data[0][3],
+                        'room_seats': class_data[0][2],
+                        'room_rows': class_data[0][4],
                     }
                     student_allocations_data.append(allocation_data)
-
-
-                student_notify_msgs = [notify.message for notify in student_notifies]
-                
-                
+                student_notify_msgs = [notify[0] for notify in student_notifies]
                 data = {
                     'name': stud_name,
-                    'prn': user.prn,
+                    'prn': user_id,
                     'department': stud_dep,
                     'user_type': user_type,
                     'notification': student_notify_msgs,
-                    'student_allocations': student_allocations_data  
+                    'student_allocations':student_allocations_data
                 }
-
+                print(data)
                 return JsonResponse(data)
 
         else:
